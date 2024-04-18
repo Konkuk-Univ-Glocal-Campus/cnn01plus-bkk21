@@ -14,24 +14,30 @@ import glob
 import os
 import zipfile 
 
+#gpu가 있으면 cuda를 쓰고 없으면 cpu를 쓴다.
 default_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Python에서 MNIST 데이터셋을 불러와서 처리하는 과정
 # 이 함수를 실행하면, builtins 모듈을 통해 전역 변수로 설정된 data_train, data_test, train_loader, test_loader가 생성되어 어디서든 접근할 수 있게 됩니다. 이러한 설정은 함수 내에서 데이터를 처리하고, 이후에 다른 부분에서 해당 데이터를 사용할 때 유용하게 활용될 수 있음
 
-def load_mnist(batch_size=64): # load_mnist라는 이름의 함수를 정의하고, 이 함수는 기본적으로 batch_size 매개변수를 64로 설정합니다. 이 매개변수는 데이터를 얼마나 많은 단위로 나눌지 결정
+#이건 숫자 mnist기 때문에 mnist-fashion 가져와야 함
+def load_mnist(batch_size = 64): # load_mnist라는 이름의 함수를 정의하고, 이 함수는 기본적으로 batch_size 매개변수를 64로 설정합니다. 이 매개변수는 데이터를 얼마나 많은 단위로 나눌지 결정
     builtins.data_train = torchvision.datasets.MNIST('./data',
         download=True,train=True,transform=ToTensor()) # torchvision 라이브러리의 datasets 모듈을 사용하여 MNIST 데이터셋을 불러옵니다. './data'는 데이터셋이 저장될 경로를 지정하며, download=True는 해당 경로에 데이터가 없을 경우 인터넷에서 자동으로 다운로드하도록 설정합니다. train=True는 학습용 데이터셋을 불러오는 것을 의미하고, transform=ToTensor()는 데이터셋의 이미지들을 파이토치 텐서로 변환하는 함수를 적용
     builtins.data_test = torchvision.datasets.MNIST('./data', 
         download=True,train=False,transform=ToTensor()) # 테스트 데이터셋을 불러오는 코드입니다. train=False로 설정하여 학습용이 아닌 테스트용 데이터셋을 불러옴
-    builtins.train_loader = torch.utils.data.DataLoader(data_train,batch_size=batch_size) # 학습 데이터셋을 데이터 로더에 로드합니다. 데이터 로더는 데이터셋을 지정된 배치 크기에 맞게 나누고, 이를 반복 가능한 객체로 만들어 학습 과정에서 쉽게 사용할 수 있게 도움
-    builtins.test_loader = torch.utils.data.DataLoader(data_test,batch_size=batch_size)
+    builtins.train_loader = torch.utils.data.DataLoader(data_train,batch_size = batch_size) # 학습 데이터셋을 데이터 로더에 로드합니다. 데이터 로더는 데이터셋을 지정된 배치 크기에 맞게 나누고, 이를 반복 가능한 객체로 만들어 학습 과정에서 쉽게 사용할 수 있게 도움
+    builtins.test_loader = torch.utils.data.DataLoader(data_test,batch_size = batch_size)
 
 # 신경망을 한 에폭(epoch) 동안 학습하는 과정을 구현한 Python 함수
 # 이 함수는 모델을 학습시키고, 각 배치에서의 평균 손실과 정확도를 계산하여 반환하는데 이를 통해 학습 과정을 모니터링할 수 있음
 
 def train_epoch(net,dataloader,lr=0.01,optimizer=None,loss_fn = nn.NLLLoss()): # 이 함수는 여러 매개변수를 받는데, net은 학습할 신경망 모델, dataloader는 데이터 로더, lr은 학습률(기본값 0.01), optimizer는 최적화 도구(기본값은 None), loss_fn은 손실 함수로 기본적으로 Negative Log Likelihood Loss를 사용
+    # 아담 옵티마이저를 보통 기본으로 쓴다 
     optimizer = optimizer or torch.optim.Adam(net.parameters(),lr=lr) # 최적화 도구가 제공되지 않았다면, Adam 최적화 도구를 사용하여 신경망의 매개변수를 최적화하며, 학습률은 lr로 설정
+    
+    # train 모드와 valid (?) 모드가 있다 
+    # 두개가 구분 되어야 한다
     net.train() # 모델을 학습 모드로 설정합니다. 이는 일부 신경망 계층(예: 드롭아웃 계층)이 학습과 평가 모드에서 다르게 동작하기 때문에 필요
     total_loss,acc,count = 0,0,0 # 총 손실, 정확도, 처리한 샘플 수를 초기화
     for features,labels in dataloader: # 데이터 로더로부터 특징(feature)과 레이블(label)을 반복적으로 가져옴
@@ -39,17 +45,24 @@ def train_epoch(net,dataloader,lr=0.01,optimizer=None,loss_fn = nn.NLLLoss()): #
         lbls = labels.to(default_device) # 레이블을 기본 계산 장치(예: GPU)로 이동
         out = net(features.to(default_device)) # 특징을 같은 장치로 이동시킨 후, 신경망을 통해 예측을 수행
         loss = loss_fn(out,lbls) #cross_entropy(out,labels) 예측 결과와 레이블을 이용해 손실을 계산
+        # out이 출력 값
         loss.backward() # 손실에 대한 기울기를 계산
+        # 파이토치에서 해준다
         optimizer.step() # 계산된 기울기를 이용해 신경망의 가중치를 업데이트
+        # 가중치 업데이트도 해준다
         total_loss+=loss # 총 손실을 누적
+        # 결과 값 계산용
         _,predicted = torch.max(out,1) # 예측된 결과 중 가장 높은 확률을 가진 클래스를 선택
+        # 가장 확률이 높은 클래스 추출하여 예측에 저장
         acc+=(predicted==lbls).sum() # 정확하게 예측된 수를 누적
+        # 정답이면 넣게 (predicted == lbls)
         count+=len(labels) # 처리된 레이블의 수를 누적
     return total_loss.item()/count, acc.item()/count # 평균 손실과 정확도를 반환
 
 # 주어진 신경망 모델을 평가하는 과정을 나타내는 Python 함수
 # 이 함수는 주어진 데이터 로더를 사용하여 모델의 성능을 평가하고, 평균 손실과 정확도를 반환하여 모델의 효율성을 확인
-
+# train 평가 결과는 나오나, valid 결과는 안 나옴 
+# mnist는 train과 valid만 있고 test 데이터가 없음 .. test 데이터가 test 데이터가 아님
 def validate(net, dataloader,loss_fn=nn.NLLLoss()): # validate 함수를 정의하고, 세 개의 매개변수를 받는데 net은 평가할 신경망 모델, dataloader는 평가 데이터셋을 로딩하는 데이터 로더, loss_fn은 손실 함수로 기본값은 Negative Log Likelihood Loss
     net.eval() # 모델을 평가(evaluation) 모드로 설정하는데 이 모드에서는 모델의 학습 과정에만 적용되는 특정 기능들(예: 드롭아웃)이 비활성화
     count,acc,loss = 0,0,0 # 총 처리한 데이터의 수, 정확히 예측된 데이터의 수, 그리고 총 손실을 0으로 초기화
@@ -64,7 +77,6 @@ def validate(net, dataloader,loss_fn=nn.NLLLoss()): # validate 함수를 정의�
     return loss.item()/count, acc.item()/count # 평균 손실과 평균 정확도를 계산하여 반환
 
 # 신경망 모델을 여러 에폭(epoch) 동안 학습하고 평가하는 과정을 정의하는 Python 함수
-
 def train(net,train_loader,test_loader,optimizer=None,lr=0.01,epochs=10,loss_fn=nn.NLLLoss()): # train 함수를 정의 - net: 학습할 신경망 모델; train_loader와 test_loader: 학습 및 테스트 데이터셋을 로드하는 데 사용되는 데이터 로더; optimizer: 최적화 도구 (기본적으로 None이며, 지정되지 않았을 경우 Adam 최적화 도구가 사용); lr: 학습률 (기본값은 0.01); epochs: 전체 학습 과정을 반복할 횟수 (기본값은 10); loss_fn: 손실 함수 (기본값은 Negative Log Likelihood Loss)
     optimizer = optimizer or torch.optim.Adam(net.parameters(),lr=lr) # 최적화 도구 (기본적으로 None이며, 지정되지 않았을 경우 Adam 최적화 도구가 사용하며, 학습률은 lr로 설정)
     res = { 'train_loss' : [], 'train_acc': [], 'val_loss': [], 'val_acc': []} # 학습 및 검증 과정에서 계산된 손실과 정확도를 저장할 딕셔너리를 초기화
